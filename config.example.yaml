@@ -57,7 +57,7 @@ multi_port:
 # ───────────────────────────────────────────────────────────────
 management:
   enabled: true                                      # 是否启用管理面板
-  listen: 0.0.0.0:9091                               # 监听地址
+  listen: 0.0.0.0:9888                               # 监听地址
   probe_target: http://cp.cloudflare.com/generate_204  # 健康检查目标
   password: ""                                       # WebUI 访问密码，为空则不需要密码
 
@@ -103,8 +103,8 @@ geoip:
 # ───────────────────────────────────────────────────────────────
 # 方式 1: 订阅链接（推荐，自动获取并写入 nodes.txt）
 # ───────────────────────────────────────────────────────────────
-# subscriptions:
-#   - "https://example.com/subscribe?token=xxx"
+subscriptions:
+  - "https://example.com/subscribe?token=xxx"
 #   - "https://another.com/api/v1/client/subscribe?token=yyy"
 
 # ───────────────────────────────────────────────────────────────
@@ -115,9 +115,9 @@ geoip:
 # ───────────────────────────────────────────────────────────────
 # 方式 3: 直接在配置文件中配置节点
 # ───────────────────────────────────────────────────────────────
-nodes:
+# nodes:
   # 最简配置：只需 URI，名称从 # 后自动提取
-  - uri: "vless://uuid@server:443?security=tls&type=ws&path=/path#节点名称"
+  # - uri: "vless://uuid@server:443?security=tls&type=ws&path=/path#节点名称"
 
   # 完整配置：手动指定名称和端口
   # - name: "自定义名称"
