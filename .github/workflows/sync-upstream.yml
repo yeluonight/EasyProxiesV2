@@ -1,0 +1,78 @@
+name: Sync Fork From Upstream
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: sync-upstream-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch refs
+        run: |
+          set -euo pipefail
+          if git remote get-url upstream >/dev/null 2>&1; then
+            git remote set-url upstream https://github.com/xiamuceer-j/EasyProxiesV2.git
+          else
+            git remote add upstream https://github.com/xiamuceer-j/EasyProxiesV2.git
+          fi
+          git fetch --prune origin main
+          git fetch --prune upstream main
+
+      - name: Detect upstream updates
+        id: detect
+        run: |
+          set -euo pipefail
+          behind_count="$(git rev-list --count origin/main..upstream/main)"
+          echo "behind_count=${behind_count}" >> "$GITHUB_OUTPUT"
+          if [ "${behind_count}" -gt 0 ]; then
+            echo "has_updates=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_updates=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Merge upstream into fork main
+        if: steps.detect.outputs.has_updates == 'true'
+        run: |
+          set -euo pipefail
+          git checkout main
+          git merge --no-edit upstream/main
+
+      - name: Push merged changes
+        if: steps.detect.outputs.has_updates == 'true'
+        run: git push origin main
+
+      - name: Trigger image build workflow
+        if: steps.detect.outputs.has_updates == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          curl -sSf -X POST \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/build-and-push-dockerhub.yml/dispatches" \
+            -d '{"ref":"main","inputs":{"trigger_reason":"upstream-sync"}}'
+
+      - name: No update
+        if: steps.detect.outputs.has_updates != 'true'
+        run: echo "No new commits on upstream/main."
