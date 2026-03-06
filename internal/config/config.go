@@ -50,10 +50,11 @@ type GeoIPConfig struct {
 	AutoUpdateInterval time.Duration `yaml:"auto_update_interval"` // 自动更新间隔，默认 24 小时
 }
 
-// ListenerConfig defines how the HTTP proxy should listen for clients.
+// ListenerConfig defines how the proxy should listen for clients.
 type ListenerConfig struct {
 	Address  string `yaml:"address"`
 	Port     uint16 `yaml:"port"`
+	Protocol string `yaml:"protocol"` // http, socks5, mixed
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
 }
@@ -69,6 +70,7 @@ type PoolConfig struct {
 type MultiPortConfig struct {
 	Address  string `yaml:"address"`
 	BasePort uint16 `yaml:"base_port"`
+	Protocol string `yaml:"protocol"` // http, socks5, mixed
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
 }
@@ -100,6 +102,27 @@ const (
 	NodeSourceSubscription NodeSource = "subscription" // Fetched from subscription URL
 	NodeSourceManual       NodeSource = "manual"       // Added manually via WebUI
 )
+
+const (
+	InboundProtocolHTTP   = "http"
+	InboundProtocolSOCKS5 = "socks5"
+	InboundProtocolMixed  = "mixed"
+)
+
+// NormalizeInboundProtocol normalizes inbound protocol aliases and validates the value.
+func NormalizeInboundProtocol(value string) (string, error) {
+	protocol := strings.ToLower(strings.TrimSpace(value))
+	switch protocol {
+	case "socks":
+		protocol = InboundProtocolSOCKS5
+	}
+	switch protocol {
+	case InboundProtocolHTTP, InboundProtocolSOCKS5, InboundProtocolMixed:
+		return protocol, nil
+	default:
+		return "", fmt.Errorf("不支持的监听协议: %q（仅支持 http/socks5/mixed）", value)
+	}
+}
 
 // NodeConfig describes a single upstream proxy endpoint expressed as URI.
 type NodeConfig struct {
@@ -202,6 +225,14 @@ func (c *Config) applyDefaults() error {
 	if c.Listener.Port == 0 {
 		c.Listener.Port = 2323
 	}
+	if c.Listener.Protocol == "" {
+		c.Listener.Protocol = InboundProtocolHTTP
+	}
+	listenerProtocol, err := NormalizeInboundProtocol(c.Listener.Protocol)
+	if err != nil {
+		return err
+	}
+	c.Listener.Protocol = listenerProtocol
 	if c.Pool.Mode == "" {
 		c.Pool.Mode = "sequential"
 	}
@@ -217,6 +248,14 @@ func (c *Config) applyDefaults() error {
 	if c.MultiPort.BasePort == 0 {
 		c.MultiPort.BasePort = 28000
 	}
+	if c.MultiPort.Protocol == "" {
+		c.MultiPort.Protocol = InboundProtocolHTTP
+	}
+	multiPortProtocol, err := NormalizeInboundProtocol(c.MultiPort.Protocol)
+	if err != nil {
+		return err
+	}
+	c.MultiPort.Protocol = multiPortProtocol
 	if c.Management.Listen == "" {
 		c.Management.Listen = "127.0.0.1:9090"
 	}
@@ -1002,6 +1041,7 @@ func (c *Config) SaveSettings() error {
 // ValidateSettingsRequest validates the settings request fields and returns
 // a descriptive error for any invalid values, instead of silently ignoring them.
 func ValidateSettingsRequest(mode string, listenerPort, multiPortBasePort uint16,
+	listenerProtocol, multiPortProtocol,
 	poolBlacklistDuration, subRefreshInterval, subRefreshTimeout,
 	subRefreshHealthCheckTimeout, subRefreshDrainTimeout,
 	geoIPAutoUpdateInterval string) error {
@@ -1019,6 +1059,14 @@ func ValidateSettingsRequest(mode string, listenerPort, multiPortBasePort uint16
 	}
 	if multiPortBasePort == 0 {
 		return fmt.Errorf("多端口起始端口不能为 0")
+	}
+
+	// Validate inbound protocols
+	if _, err := NormalizeInboundProtocol(listenerProtocol); err != nil {
+		return fmt.Errorf("监听入口协议无效: %w", err)
+	}
+	if _, err := NormalizeInboundProtocol(multiPortProtocol); err != nil {
+		return fmt.Errorf("多端口入口协议无效: %w", err)
 	}
 
 	// Validate duration fields

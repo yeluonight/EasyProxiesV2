@@ -10,11 +10,13 @@ const defaultSettings: SettingsData = {
 
   listener_address: '0.0.0.0',
   listener_port: 2323,
+  listener_protocol: 'http',
   listener_username: '',
   listener_password: '',
 
   multi_port_address: '0.0.0.0',
   multi_port_base_port: 24000,
+  multi_port_protocol: 'http',
   multi_port_username: '',
   multi_port_password: '',
 
@@ -387,6 +389,20 @@ export default function SettingsPanel() {
             </fieldset>
           </div>
 
+          <fieldset className="fieldset">
+            <legend className="fieldset-legend font-semibold text-base-content/80">监听协议</legend>
+            <select
+              className="select select-md w-full bg-base-200/50 focus:bg-base-100 transition-colors focus:border-primary/50"
+              value={settings.listener_protocol}
+              onChange={(e) => updateField('listener_protocol', e.target.value)}
+            >
+              <option value="http">http</option>
+              <option value="socks5">socks5</option>
+              <option value="mixed">mixed (HTTP + SOCKS5)</option>
+            </select>
+            <p className="label text-base-content/50 mt-1">mixed 表示同端口同时支持 HTTP 与 SOCKS5</p>
+          </fieldset>
+
           <div className="grid grid-cols-2 gap-4 pt-2">
             <fieldset className="fieldset">
               <legend className="fieldset-legend font-semibold text-base-content/80">代理用户名</legend>
@@ -447,6 +463,20 @@ export default function SettingsPanel() {
               />
             </fieldset>
           </div>
+
+          <fieldset className="fieldset">
+            <legend className="fieldset-legend font-semibold text-base-content/80">监听协议</legend>
+            <select
+              className="select select-md w-full bg-base-200/50 focus:bg-base-100 transition-colors focus:border-primary/50"
+              value={settings.multi_port_protocol}
+              onChange={(e) => updateField('multi_port_protocol', e.target.value)}
+            >
+              <option value="http">http</option>
+              <option value="socks5">socks5</option>
+              <option value="mixed">mixed (HTTP + SOCKS5)</option>
+            </select>
+            <p className="label text-base-content/50 mt-1">应用于 multi-port / hybrid 的每个节点入口</p>
+          </fieldset>
 
           <div className="grid grid-cols-2 gap-4 pt-2">
             <fieldset className="fieldset">

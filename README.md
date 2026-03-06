@@ -101,7 +101,8 @@ cp ./config.example.yaml ./config.yaml
 配置模板见 `config.example.yaml`，重点关注：
 
 - `mode`: `pool` / `multi-port` / `hybrid`
-- `listener`: 代理入口监听与认证
+- `listener`: 代理入口监听与认证（新增 `listener.protocol`: `http` / `socks5` / `mixed`）
+- `multi_port`: 多端口入口参数（新增 `multi_port.protocol`: `http` / `socks5` / `mixed`）
 - `management.listen`: Web 管理面板地址（默认 `0.0.0.0:9888`）
 - `management.password`: 面板登录密码（为空则不需要登录）
 - `subscriptions` / `nodes_file` / `nodes`: 节点来源（三选一或混用）

@@ -199,23 +199,19 @@ func Build(cfg *config.Config) (option.Options, error) {
 				Options: &perOptions,
 			}
 			outbounds = append(outbounds, perPool)
-			inboundOptions := &option.HTTPMixedInboundOptions{
-				ListenOptions: option.ListenOptions{
-					Listen:     addr,
-					ListenPort: meta.Port,
-				},
-			}
-			username := cfg.MultiPort.Username
-			password := cfg.MultiPort.Password
-			if username != "" {
-				inboundOptions.Users = []auth.User{{Username: username, Password: password}}
-			}
 			inboundTag := fmt.Sprintf("in-%s", tag)
-			inbounds = append(inbounds, option.Inbound{
-				Type:    C.TypeHTTP,
-				Tag:     inboundTag,
-				Options: inboundOptions,
-			})
+			inbound, err := buildInboundByProtocol(
+				cfg.MultiPort.Protocol,
+				addr,
+				meta.Port,
+				cfg.MultiPort.Username,
+				cfg.MultiPort.Password,
+				inboundTag,
+			)
+			if err != nil {
+				return option.Options{}, fmt.Errorf("build multi-port inbound for %s: %w", tag, err)
+			}
+			inbounds = append(inbounds, inbound)
 			route.Rules = append(route.Rules, option.Rule{
 				Type: C.RuleTypeDefault,
 				DefaultOptions: option.DefaultRule{
@@ -292,24 +288,59 @@ func buildPoolInbound(cfg *config.Config) (option.Inbound, error) {
 	if err != nil {
 		return option.Inbound{}, fmt.Errorf("parse listener address: %w", err)
 	}
-	inboundOptions := &option.HTTPMixedInboundOptions{
-		ListenOptions: option.ListenOptions{
-			Listen:     listenAddr,
-			ListenPort: cfg.Listener.Port,
-		},
+	return buildInboundByProtocol(
+		cfg.Listener.Protocol,
+		listenAddr,
+		cfg.Listener.Port,
+		cfg.Listener.Username,
+		cfg.Listener.Password,
+		"http-in",
+	)
+}
+
+func buildInboundByProtocol(protocol string, listenAddr *badoption.Addr, port uint16, username, password, tag string) (option.Inbound, error) {
+	users := []auth.User(nil)
+	if username != "" {
+		users = []auth.User{{Username: username, Password: password}}
 	}
-	if cfg.Listener.Username != "" {
-		inboundOptions.Users = []auth.User{{
-			Username: cfg.Listener.Username,
-			Password: cfg.Listener.Password,
-		}}
+
+	switch protocol {
+	case config.InboundProtocolHTTP:
+		opts := &option.HTTPMixedInboundOptions{
+			ListenOptions: option.ListenOptions{
+				Listen:     listenAddr,
+				ListenPort: port,
+			},
+		}
+		if len(users) > 0 {
+			opts.Users = users
+		}
+		return option.Inbound{Type: C.TypeHTTP, Tag: tag, Options: opts}, nil
+	case config.InboundProtocolSOCKS5:
+		opts := &option.SocksInboundOptions{
+			ListenOptions: option.ListenOptions{
+				Listen:     listenAddr,
+				ListenPort: port,
+			},
+		}
+		if len(users) > 0 {
+			opts.Users = users
+		}
+		return option.Inbound{Type: C.TypeSOCKS, Tag: tag, Options: opts}, nil
+	case config.InboundProtocolMixed:
+		opts := &option.HTTPMixedInboundOptions{
+			ListenOptions: option.ListenOptions{
+				Listen:     listenAddr,
+				ListenPort: port,
+			},
+		}
+		if len(users) > 0 {
+			opts.Users = users
+		}
+		return option.Inbound{Type: C.TypeMixed, Tag: tag, Options: opts}, nil
+	default:
+		return option.Inbound{}, fmt.Errorf("unsupported inbound protocol %q", protocol)
 	}
-	inbound := option.Inbound{
-		Type:    C.TypeHTTP,
-		Tag:     "http-in",
-		Options: inboundOptions,
-	}
-	return inbound, nil
 }
 
 func buildNodeOutbound(tag, rawURI string, skipCertVerify bool) (option.Outbound, error) {

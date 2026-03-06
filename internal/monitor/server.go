@@ -196,12 +196,14 @@ type allSettingsResponse struct {
 	// Listener
 	ListenerAddress  string `json:"listener_address"`
 	ListenerPort     uint16 `json:"listener_port"`
+	ListenerProtocol string `json:"listener_protocol"`
 	ListenerUsername string `json:"listener_username"`
 	ListenerPassword string `json:"listener_password"`
 
 	// Multi-port
 	MultiPortAddress  string `json:"multi_port_address"`
 	MultiPortBasePort uint16 `json:"multi_port_base_port"`
+	MultiPortProtocol string `json:"multi_port_protocol"`
 	MultiPortUsername string `json:"multi_port_username"`
 	MultiPortPassword string `json:"multi_port_password"`
 
@@ -245,12 +247,14 @@ type allSettingsRequest struct {
 	// Listener
 	ListenerAddress  string `json:"listener_address"`
 	ListenerPort     uint16 `json:"listener_port"`
+	ListenerProtocol string `json:"listener_protocol"`
 	ListenerUsername string `json:"listener_username"`
 	ListenerPassword string `json:"listener_password"`
 
 	// Multi-port
 	MultiPortAddress  string `json:"multi_port_address"`
 	MultiPortBasePort uint16 `json:"multi_port_base_port"`
+	MultiPortProtocol string `json:"multi_port_protocol"`
 	MultiPortUsername string `json:"multi_port_username"`
 	MultiPortPassword string `json:"multi_port_password"`
 
@@ -308,11 +312,13 @@ func (s *Server) getAllSettings() allSettingsResponse {
 
 		ListenerAddress:  c.Listener.Address,
 		ListenerPort:     c.Listener.Port,
+		ListenerProtocol: c.Listener.Protocol,
 		ListenerUsername: c.Listener.Username,
 		ListenerPassword: c.Listener.Password,
 
 		MultiPortAddress:  c.MultiPort.Address,
 		MultiPortBasePort: c.MultiPort.BasePort,
+		MultiPortProtocol: c.MultiPort.Protocol,
 		MultiPortUsername: c.MultiPort.Username,
 		MultiPortPassword: c.MultiPort.Password,
 
@@ -346,6 +352,7 @@ func (s *Server) updateAllSettings(req allSettingsRequest) error {
 	// Validate request before applying
 	if err := config.ValidateSettingsRequest(
 		req.Mode, req.ListenerPort, req.MultiPortBasePort,
+		req.ListenerProtocol, req.MultiPortProtocol,
 		req.PoolBlacklistDuration, req.SubRefreshInterval, req.SubRefreshTimeout,
 		req.SubRefreshHealthCheckTimeout, req.SubRefreshDrainTimeout,
 		req.GeoIPAutoUpdateInterval,
@@ -374,12 +381,18 @@ func (s *Server) updateAllSettings(req allSettingsRequest) error {
 	// Listener
 	c.Listener.Address = req.ListenerAddress
 	c.Listener.Port = req.ListenerPort
+	if p, err := config.NormalizeInboundProtocol(req.ListenerProtocol); err == nil {
+		c.Listener.Protocol = p
+	}
 	c.Listener.Username = req.ListenerUsername
 	c.Listener.Password = req.ListenerPassword
 
 	// Multi-port
 	c.MultiPort.Address = req.MultiPortAddress
 	c.MultiPort.BasePort = req.MultiPortBasePort
+	if p, err := config.NormalizeInboundProtocol(req.MultiPortProtocol); err == nil {
+		c.MultiPort.Protocol = p
+	}
 	c.MultiPort.Username = req.MultiPortUsername
 	c.MultiPort.Password = req.MultiPortPassword
 

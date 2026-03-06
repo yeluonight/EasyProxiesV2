@@ -29,6 +29,7 @@ skip_cert_verify: false
 listener:
   address: 0.0.0.0      # 监听地址
   port: 2323            # 监听端口
+  protocol: http        # 监听协议: http | socks5 | mixed
   username: username    # 代理认证用户名
   password: password    # 代理认证密码
 
@@ -49,6 +50,7 @@ pool:
 multi_port:
   address: 0.0.0.0      # 监听地址
   base_port: 24000      # 起始端口号
+  protocol: http        # 监听协议: http | socks5 | mixed
   username: mpuser      # 默认认证用户名
   password: mppass      # 默认认证密码
 

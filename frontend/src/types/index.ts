@@ -86,12 +86,14 @@ export interface SettingsData {
   // Listener
   listener_address: string
   listener_port: number
+  listener_protocol: string
   listener_username: string
   listener_password: string
 
   // Multi-port
   multi_port_address: string
   multi_port_base_port: number
+  multi_port_protocol: string
   multi_port_username: string
   multi_port_password: string
 
