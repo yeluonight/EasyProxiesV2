@@ -5,6 +5,7 @@ import DebugPanel from './components/DebugPanel'
 import SettingsPanel from './components/SettingsPanel'
 import LoginPage from './components/LoginPage'
 import { checkAuth, getToken, logout } from './api/client'
+import packageJson from '../package.json'
 
 type AuthState = 'loading' | 'need_login' | 'authenticated'
 type TabId = 'monitor' | 'manage' | 'debug' | 'settings'
@@ -64,6 +65,8 @@ const MENU_ITEMS: { id: TabId; label: string; icon: React.ReactNode; desc: strin
 
 const VALID_TABS: TabId[] = ['monitor', 'manage', 'debug', 'settings']
 const THEME_STORAGE_KEY = 'ep-theme'
+
+const APP_VERSION = `v${packageJson.version}`
 
 const DARK_THEMES = new Set([
   'dark', 'synthwave', 'halloween', 'forest', 'black', 'luxury',
@@ -379,7 +382,7 @@ function App() {
               </div>
               <div className="flex flex-col">
                 <span className="text-sm font-semibold text-base-content/80">系统运行正常</span>
-                <span className="text-xs text-base-content/40">v1.0.0</span>
+                <span className="text-xs text-base-content/40">{APP_VERSION}</span>
               </div>
             </div>
           </div>
