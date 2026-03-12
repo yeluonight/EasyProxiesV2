@@ -495,13 +495,14 @@ func extractHostFromURI(uri string) string {
 	// Handle different URI schemes
 	lowerURI := strings.ToLower(uri)
 
-	// vmess:// vless:// trojan:// ss:// ssr:// hysteria:// hysteria2:// hy2://
+	// vmess:// vless:// trojan:// ss:// ssr:// hysteria:// hysteria2:// hy2:// anytls://
 	if strings.HasPrefix(lowerURI, "vmess://") ||
 		strings.HasPrefix(lowerURI, "vless://") ||
 		strings.HasPrefix(lowerURI, "trojan://") ||
 		strings.HasPrefix(lowerURI, "hysteria://") ||
 		strings.HasPrefix(lowerURI, "hysteria2://") ||
-		strings.HasPrefix(lowerURI, "hy2://") {
+		strings.HasPrefix(lowerURI, "hy2://") ||
+		strings.HasPrefix(lowerURI, "anytls://") {
 		// Standard URL format: scheme://user@host:port?params#fragment
 		parsed, err := url.Parse(uri)
 		if err != nil {

@@ -185,7 +185,7 @@ func loadNodesFromLegacyFile(path string) ([]string, error) {
 // isProxyURI checks if a string looks like a proxy URI.
 func isProxyURI(s string) bool {
 	schemes := []string{"vmess://", "vless://", "trojan://", "ss://", "ssr://",
-		"hysteria://", "hysteria2://", "hy2://", "http://", "socks5://"}
+		"hysteria://", "hysteria2://", "hy2://", "anytls://", "http://", "socks5://"}
 	lower := strings.ToLower(s)
 	for _, scheme := range schemes {
 		if strings.HasPrefix(lower, scheme) {

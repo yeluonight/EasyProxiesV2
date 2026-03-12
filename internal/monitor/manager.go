@@ -136,6 +136,14 @@ type Manager struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
 	logger     Logger
+
+	// periodic health check control
+	healthMu        sync.Mutex
+	healthInterval  time.Duration
+	healthTimeout   time.Duration
+	healthTicker    *time.Ticker
+	healthIntervalC chan time.Duration
+	probeAllInFlight atomic.Bool
 }
 
 // Logger interface for logging
@@ -199,20 +207,53 @@ func (m *Manager) StartPeriodicHealthCheck(interval, timeout time.Duration) {
 		}
 		return
 	}
+	if interval <= 0 {
+		interval = 2 * time.Hour
+	}
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+
+	m.healthMu.Lock()
+	if m.healthIntervalC == nil {
+		m.healthIntervalC = make(chan time.Duration, 1)
+	}
+	m.healthInterval = interval
+	m.healthTimeout = timeout
+	if m.healthTicker != nil {
+		m.healthTicker.Stop()
+	}
+	m.healthTicker = time.NewTicker(interval)
+	ticker := m.healthTicker
+	intervalC := m.healthIntervalC
+	m.healthMu.Unlock()
 
 	go func() {
-		// 启动后立即进行一次检查
-		m.probeAllNodes(timeout)
-
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
+		// 启动后立即进行一次检查（走去重）
+		m.RequestProbeAllOnce(timeout)
 
 		for {
 			select {
 			case <-m.ctx.Done():
 				return
+			case newInterval := <-intervalC:
+				if newInterval <= 0 {
+					newInterval = 2 * time.Hour
+				}
+				// 重置 ticker
+				m.healthMu.Lock()
+				m.healthInterval = newInterval
+				if m.healthTicker != nil {
+					m.healthTicker.Stop()
+				}
+				m.healthTicker = time.NewTicker(newInterval)
+				ticker = m.healthTicker
+				m.healthMu.Unlock()
+				if m.logger != nil {
+					m.logger.Info("periodic health check interval updated: ", newInterval)
+				}
 			case <-ticker.C:
-				m.probeAllNodes(timeout)
+				m.RequestProbeAllOnce(timeout)
 			}
 		}
 	}()
@@ -220,6 +261,41 @@ func (m *Manager) StartPeriodicHealthCheck(interval, timeout time.Duration) {
 	if m.logger != nil {
 		m.logger.Info("periodic health check started, interval: ", interval)
 	}
+}
+
+// SetHealthCheckInterval updates the periodic health check interval at runtime.
+// It is safe to call before StartPeriodicHealthCheck; it will be applied on start.
+func (m *Manager) SetHealthCheckInterval(d time.Duration) {
+	if d <= 0 {
+		return
+	}
+	m.healthMu.Lock()
+	m.healthInterval = d
+	intervalC := m.healthIntervalC
+	m.healthMu.Unlock()
+
+	if intervalC != nil {
+		select {
+		case intervalC <- d:
+		default:
+			// drop if a newer update is already queued
+		}
+	}
+}
+
+// RequestProbeAllOnce triggers a full probe round at most once concurrently.
+// If another full probe is already running, it returns immediately.
+func (m *Manager) RequestProbeAllOnce(timeout time.Duration) {
+	if !m.probeReady {
+		return
+	}
+	if m.probeAllInFlight.Swap(true) {
+		return
+	}
+	go func() {
+		defer m.probeAllInFlight.Store(false)
+		m.probeAllNodes(timeout)
+	}()
 }
 
 // probeAllNodes checks all registered nodes concurrently.

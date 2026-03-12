@@ -213,10 +213,11 @@ type allSettingsResponse struct {
 	PoolBlacklistDuration string `json:"pool_blacklist_duration"`
 
 	// Management
-	ManagementEnabled     bool   `json:"management_enabled"`
-	ManagementListen      string `json:"management_listen"`
-	ManagementProbeTarget string `json:"management_probe_target"`
-	ManagementPassword    string `json:"management_password"`
+	ManagementEnabled             bool   `json:"management_enabled"`
+	ManagementListen              string `json:"management_listen"`
+	ManagementProbeTarget         string `json:"management_probe_target"`
+	ManagementPassword            string `json:"management_password"`
+	ManagementHealthCheckInterval string `json:"management_health_check_interval"`
 
 	// Subscription refresh
 	SubRefreshEnabled            bool   `json:"sub_refresh_enabled"`
@@ -264,10 +265,11 @@ type allSettingsRequest struct {
 	PoolBlacklistDuration string `json:"pool_blacklist_duration"`
 
 	// Management
-	ManagementEnabled     *bool  `json:"management_enabled"`
-	ManagementListen      string `json:"management_listen"`
-	ManagementProbeTarget string `json:"management_probe_target"`
-	ManagementPassword    string `json:"management_password"`
+	ManagementEnabled             *bool  `json:"management_enabled"`
+	ManagementListen              string `json:"management_listen"`
+	ManagementProbeTarget         string `json:"management_probe_target"`
+	ManagementPassword            string `json:"management_password"`
+	ManagementHealthCheckInterval string `json:"management_health_check_interval"`
 
 	// Subscription refresh
 	SubRefreshEnabled            bool   `json:"sub_refresh_enabled"`
@@ -326,10 +328,11 @@ func (s *Server) getAllSettings() allSettingsResponse {
 		PoolFailureThreshold:  c.Pool.FailureThreshold,
 		PoolBlacklistDuration: c.Pool.BlacklistDuration.String(),
 
-		ManagementEnabled:     mgmtEnabled,
-		ManagementListen:      c.Management.Listen,
-		ManagementProbeTarget: c.Management.ProbeTarget,
-		ManagementPassword:    c.Management.Password,
+		ManagementEnabled:             mgmtEnabled,
+		ManagementListen:              c.Management.Listen,
+		ManagementProbeTarget:         c.Management.ProbeTarget,
+		ManagementPassword:            c.Management.Password,
+		ManagementHealthCheckInterval: c.Management.HealthCheckInterval.String(),
 
 		SubRefreshEnabled:            c.SubscriptionRefresh.Enabled,
 		SubRefreshInterval:           c.SubscriptionRefresh.Interval.String(),
@@ -355,7 +358,7 @@ func (s *Server) updateAllSettings(req allSettingsRequest) error {
 		req.ListenerProtocol, req.MultiPortProtocol,
 		req.PoolBlacklistDuration, req.SubRefreshInterval, req.SubRefreshTimeout,
 		req.SubRefreshHealthCheckTimeout, req.SubRefreshDrainTimeout,
-		req.GeoIPAutoUpdateInterval,
+		req.GeoIPAutoUpdateInterval, req.ManagementHealthCheckInterval,
 	); err != nil {
 		return fmt.Errorf("参数验证失败: %w", err)
 	}
@@ -410,6 +413,9 @@ func (s *Server) updateAllSettings(req allSettingsRequest) error {
 	c.Management.Listen = req.ManagementListen
 	c.Management.ProbeTarget = strings.TrimSpace(req.ManagementProbeTarget)
 	c.Management.Password = req.ManagementPassword
+	if d, err := time.ParseDuration(req.ManagementHealthCheckInterval); err == nil && d > 0 {
+		c.Management.HealthCheckInterval = d
+	}
 
 	// Subscription refresh
 	c.SubscriptionRefresh.Enabled = req.SubRefreshEnabled
@@ -455,6 +461,10 @@ func (s *Server) updateAllSettings(req allSettingsRequest) error {
 		if err := s.mgr.UpdateProbeTarget(c.Management.ProbeTarget); err != nil {
 			s.logger.Printf("更新探测目标失败: %v", err)
 		}
+	}
+	// 动态更新周期健康检查间隔，使其立即生效
+	if c.Management.HealthCheckInterval > 0 && s.mgr != nil {
+		s.mgr.SetHealthCheckInterval(c.Management.HealthCheckInterval)
 	}
 
 	s.logger.Printf("✅ 设置已保存并同步到运行时")
@@ -1086,7 +1096,7 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 
 		writeJSON(w, map[string]any{
 			"message":     "设置已保存",
-			"need_reload": true,
+			"need_reload": false,
 		})
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)

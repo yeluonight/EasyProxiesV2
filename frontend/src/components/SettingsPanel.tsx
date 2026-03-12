@@ -28,6 +28,7 @@ const defaultSettings: SettingsData = {
   management_listen: '0.0.0.0:9090',
   management_probe_target: '',
   management_password: '',
+  management_health_check_interval: '2h0m0s',
 
   sub_refresh_enabled: false,
   sub_refresh_interval: '1h0m0s',
@@ -600,6 +601,18 @@ export default function SettingsPanel() {
               onChange={(e) => updateField('management_probe_target', e.target.value)}
             />
             <p className="label text-base-content/50 mt-1">健康检查的目标地址</p>
+          </fieldset>
+
+          <fieldset className="fieldset">
+            <legend className="fieldset-legend font-semibold text-base-content/80">健康检查间隔</legend>
+            <input
+              type="text"
+              className="input input-md w-full bg-base-200/50 focus:bg-base-100 transition-colors focus:border-primary/50"
+              placeholder="例如: 2h, 30m, 1h30m"
+              value={settings.management_health_check_interval}
+              onChange={(e) => updateField('management_health_check_interval', e.target.value)}
+            />
+            <p className="label text-base-content/50 mt-1">Go duration 格式：如 2h、30m、1h30m（修改后立即生效，无需重载）</p>
           </fieldset>
 
           <fieldset className="fieldset">

@@ -107,6 +107,7 @@ export interface SettingsData {
   management_listen: string
   management_probe_target: string
   management_password: string
+  management_health_check_interval: string
 
   // Subscription refresh
   sub_refresh_enabled: boolean
