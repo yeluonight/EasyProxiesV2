@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -77,10 +78,11 @@ type MultiPortConfig struct {
 
 // ManagementConfig controls the monitoring HTTP endpoint.
 type ManagementConfig struct {
-	Enabled     *bool  `yaml:"enabled"`
-	Listen      string `yaml:"listen"`
-	ProbeTarget string `yaml:"probe_target"`
-	Password    string `yaml:"password"` // WebUI 访问密码，为空则不需要密码
+	Enabled             *bool          `yaml:"enabled"`
+	Listen              string         `yaml:"listen"`
+	ProbeTarget         string         `yaml:"probe_target"`
+	Password            string         `yaml:"password"` // WebUI 访问密码，为空则不需要密码
+	HealthCheckInterval time.Duration `yaml:"health_check_interval"`
 }
 
 // SubscriptionRefreshConfig controls subscription auto-refresh and reload settings.
@@ -265,6 +267,9 @@ func (c *Config) applyDefaults() error {
 	if c.Management.Enabled == nil {
 		defaultEnabled := true
 		c.Management.Enabled = &defaultEnabled
+	}
+	if c.Management.HealthCheckInterval <= 0 {
+		c.Management.HealthCheckInterval = 2 * time.Hour
 	}
 
 	// Subscription refresh defaults
@@ -678,7 +683,7 @@ func isBase64(s string) bool {
 
 // IsProxyURI checks if a string is a valid proxy URI
 func IsProxyURI(s string) bool {
-	schemes := []string{"vmess://", "vless://", "trojan://", "ss://", "ssr://", "hysteria://", "hysteria2://", "hy2://"}
+	schemes := []string{"vmess://", "vless://", "trojan://", "ss://", "ssr://", "hysteria://", "hysteria2://", "hy2://", "anytls://"}
 	for _, scheme := range schemes {
 		if strings.HasPrefix(strings.ToLower(s), scheme) {
 			return true
@@ -764,6 +769,8 @@ func convertClashProxyToURI(p clashProxy) string {
 		return buildShadowsocksURI(p)
 	case "hysteria2", "hy2":
 		return buildHysteria2URI(p)
+	case "anytls":
+		return buildAnyTLSURI(p)
 	default:
 		return ""
 	}
@@ -908,6 +915,25 @@ func buildHysteria2URI(p clashProxy) string {
 	return fmt.Sprintf("hysteria2://%s@%s:%d%s#%s", p.Password, p.Server, p.Port, query, url.QueryEscape(p.Name))
 }
 
+func buildAnyTLSURI(p clashProxy) string {
+	params := url.Values{}
+	if p.ServerName != "" {
+		params.Set("sni", p.ServerName)
+	} else if p.SNI != "" {
+		params.Set("sni", p.SNI)
+	}
+	if p.SkipCertVerify {
+		params.Set("insecure", "1")
+	}
+
+	query := ""
+	if len(params) > 0 {
+		query = "?" + params.Encode()
+	}
+
+	return fmt.Sprintf("anytls://%s@%s:%d%s#%s", p.Password, p.Server, p.Port, query, url.QueryEscape(p.Name))
+}
+
 // RLock acquires a read lock on the config.
 func (c *Config) RLock() {
 	if c != nil {
@@ -1044,7 +1070,7 @@ func ValidateSettingsRequest(mode string, listenerPort, multiPortBasePort uint16
 	listenerProtocol, multiPortProtocol,
 	poolBlacklistDuration, subRefreshInterval, subRefreshTimeout,
 	subRefreshHealthCheckTimeout, subRefreshDrainTimeout,
-	geoIPAutoUpdateInterval string) error {
+	geoIPAutoUpdateInterval, managementHealthCheckInterval string) error {
 
 	// Validate mode
 	switch mode {
@@ -1080,6 +1106,7 @@ func ValidateSettingsRequest(mode string, listenerPort, multiPortBasePort uint16
 		{"健康检查超时", subRefreshHealthCheckTimeout},
 		{"排空超时", subRefreshDrainTimeout},
 		{"GeoIP 更新间隔", geoIPAutoUpdateInterval},
+		{"周期健康检查间隔", managementHealthCheckInterval},
 	}
 
 	for _, field := range durationFields {
@@ -1153,6 +1180,22 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 
 	// Atomic rename
 	if err := os.Rename(tmpPath, path); err != nil {
+		// 当 config.yaml 通过 bind-mount 映射到宿主机时，部分宿主机文件系统/挂载模式会导致
+		// 对“正在被挂载使用的目标文件”执行 rename 返回 EBUSY（device or resource busy）。
+		// 这种情况下回退为“直接覆盖写入”（非原子，但可用），以保证 WebUI 能保存配置。
+		if errors.Is(err, syscall.EBUSY) {
+			data, rerr := os.ReadFile(tmpPath)
+			if rerr != nil {
+				return fmt.Errorf("rename temp file: %w", err)
+			}
+			if werr := os.WriteFile(path, data, perm); werr != nil {
+				return fmt.Errorf("rename temp file: %w", err)
+			}
+			if cerr := os.Remove(tmpPath); cerr != nil {
+				// best-effort cleanup
+			}
+			return nil
+		}
 		return fmt.Errorf("rename temp file: %w", err)
 	}
 

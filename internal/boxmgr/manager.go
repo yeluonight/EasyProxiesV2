@@ -29,7 +29,7 @@ const (
 	defaultDrainTimeout       = 10 * time.Second
 	defaultHealthCheckTimeout = 30 * time.Second
 	healthCheckPollInterval   = 500 * time.Millisecond
-	periodicHealthInterval    = 5 * time.Minute
+	// periodicHealthInterval is configured via cfg.Management.HealthCheckInterval
 	periodicHealthTimeout     = 10 * time.Second
 )
 
@@ -160,7 +160,8 @@ func (m *Manager) Start(ctx context.Context) error {
 	// Start periodic health check after nodes are registered
 	m.mu.Lock()
 	if m.monitorMgr != nil && !m.healthCheckStarted {
-		m.monitorMgr.StartPeriodicHealthCheck(periodicHealthInterval, periodicHealthTimeout)
+		interval := cfg.Management.HealthCheckInterval
+		m.monitorMgr.StartPeriodicHealthCheck(interval, periodicHealthTimeout)
 		m.healthCheckStarted = true
 	}
 	m.mu.Unlock()
@@ -280,6 +281,10 @@ func (m *Manager) Reload(newCfg *config.Config) error {
 		l.OnConfigUpdate(newCfg)
 	}
 
+	// Reload 成功后立即触发 1 次全量探测（内部去重，避免多次 Reload 造成突发）
+	if m.monitorMgr != nil {
+		go m.monitorMgr.RequestProbeAllOnce(periodicHealthTimeout)
+	}
 	m.logger.Infof("reload completed successfully with %d nodes", len(newCfg.Nodes))
 	return nil
 }

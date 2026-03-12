@@ -379,9 +379,57 @@ func buildNodeOutbound(tag, rawURI string, skipCertVerify bool) (option.Outbound
 			return option.Outbound{}, err
 		}
 		return option.Outbound{Type: C.TypeVMess, Tag: tag, Options: &opts}, nil
+	case "anytls":
+		opts, err := buildAnyTLSOptions(parsed, skipCertVerify)
+		if err != nil {
+			return option.Outbound{}, err
+		}
+		return option.Outbound{Type: C.TypeAnyTLS, Tag: tag, Options: &opts}, nil
 	default:
 		return option.Outbound{}, fmt.Errorf("unsupported scheme %q", parsed.Scheme)
 	}
+}
+
+func buildAnyTLSOptions(u *url.URL, skipCertVerify bool) (option.AnyTLSOutboundOptions, error) {
+	password := ""
+	if u.User != nil {
+		password = u.User.Username()
+	}
+	if password == "" {
+		return option.AnyTLSOutboundOptions{}, errors.New("anytls uri missing password in userinfo")
+	}
+	server, port, err := hostPort(u, 443)
+	if err != nil {
+		return option.AnyTLSOutboundOptions{}, err
+	}
+	query := u.Query()
+	opts := option.AnyTLSOutboundOptions{
+		ServerOptions: option.ServerOptions{Server: server, ServerPort: uint16(port)},
+		Password:      password,
+	}
+
+	// AnyTLS requires TLS
+	tlsOptions := &option.OutboundTLSOptions{Enabled: true, Insecure: skipCertVerify}
+	tlsOptions.ServerName = server
+	if sni := query.Get("sni"); sni != "" {
+		tlsOptions.ServerName = sni
+	}
+	insecure := query.Get("insecure")
+	if insecure == "" {
+		insecure = query.Get("allowInsecure")
+	}
+	if insecure != "" {
+		tlsOptions.Insecure = insecure == "1" || strings.EqualFold(insecure, "true")
+	}
+	if alpn := query.Get("alpn"); alpn != "" {
+		tlsOptions.ALPN = badoption.Listable[string](strings.Split(alpn, ","))
+	}
+	if fp := query.Get("fp"); fp != "" {
+		tlsOptions.UTLS = &option.OutboundUTLSOptions{Enabled: true, Fingerprint: fp}
+	}
+	opts.OutboundTLSOptionsContainer = option.OutboundTLSOptionsContainer{TLS: tlsOptions}
+
+	return opts, nil
 }
 
 func buildVLESSOptions(u *url.URL, skipCertVerify bool) (option.VLESSOutboundOptions, error) {
